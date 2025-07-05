@@ -4,7 +4,7 @@ subtitle: "Encuentro 8 - capítulo 12"
 format: 
   revealjs:
     highlight-style: github
-    theme: slides.scss
+    theme: slides
     code-block-height: 600px
 editor: visual
 execute: 
