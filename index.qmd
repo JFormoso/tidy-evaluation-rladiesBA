@@ -1,11 +1,430 @@
 ---
-title: "tidy-evaluation-rladiesBA"
+title: "Club de lectura de Mastering Shiny: Evaluación tidy"
+subtitle: "Encuentro 8 - capítulo 12"
+format: 
+  revealjs:
+    highlight-style: github
+    theme: slides.scss
+    code-block-height: 600px
+editor: visual
+execute: 
+  echo: true
+  warning: false
+logo: "https://raw.githubusercontent.com/renbaires/2024-12-20-welcome/main/imagenes/logo.png"
 ---
 
-This is a Quarto website.
+```{r setup, echo=FALSE}
+library(tidyverse)
+library(shiny)
 
-To learn more about Quarto websites visit <https://quarto.org/docs/websites>.
+```
+
+### ¿Qué es la evaluación Tidy?
+
+Framework del paquete `rlang` que permite controlar cómo se evalúan las expresiones y variables en tu código cuando están dentro de funciones del tidyverse.
+
+::::: columns
+::: {.column width="40%"}
+```{r, eval=FALSE}
+
+# Con R Base
+df[df$x > 5, ]
+
+# Con tidyverse
+df |> 
+  filter(x > 5)
+
+
+
+
+```
+:::
+
+::: {.column width="50%"}
+-   Hace que **R** entienda que `x` no es un objeto global, sino una columna del df.
+-   Hace más difícil referirse a ella de forma indirecta (ej. input\$var)
+:::
+:::::
+
+------------------------------------------------------------------------
+
+### Variables de entorno (env-variable)
+
+-   Es una variable de programación que creás con \<- en el entorno de R.
+
+-   Vive en el entorno de ejecución, no dentro de un df.
+
+-   Se accede directamente por su nombre o desde un input en Shiny, como input\$var.
+
+------------------------------------------------------------------------
+
+### Variable de datos (data-variable)
+
+-   Es una variable estadística (columna que forma parte de un df).
+
+-   Vive dentro de un objeto de tipo tabla (df o tibble).
+
+-   Se accede usando \$, \[\[ \]\], o dentro de funciones del tidyverse (gracias al data masking).
+
+------------------------------------------------------------------------
+
+### Ejemplo #1
+
+**Objetivo:**
+
+-   Filtrar el set de datos `diamods` por la columna o variable seleccionada por el usuario.
+
+------------------------------------------------------------------------
+
+### Ejemplo #1
+
+```{r, eval=FALSE}
+#| code-line-numbers: "|4-5|9-10"
+
+variable_ent <- "carat"
+num_vars <- c("carat", "depth", "table", "price", "x", "y", "z")
+
+ui <- fluidPage(
+  selectInput("var", "Variable", choices = num_vars),
+  numericInput("min", "Minimum", value = 1),
+  tableOutput("output")
+)
+server <- function(input, output, session) {
+  data <- reactive(diamonds %>% 
+                     filter(variable_ent > 5))
+  output$output <- renderTable(head(data()))
+}
+
+shinyApp(ui, server)
+```
+
+------------------------------------------------------------------------
+
+### Ejemplo #1
+
+```{r, eval=FALSE}
+#| code-line-numbers: "9-10"
+
+
+num_vars <- c("carat", "depth", "table", "price", "x", "y", "z")
+
+ui <- fluidPage(
+  selectInput("var", "Variable", choices = num_vars),
+  numericInput("min", "Minimum", value = 1),
+  tableOutput("output")
+)
+server <- function(input, output, session) {
+  data <- reactive(diamonds %>% 
+                     filter("carat" > 5))
+  output$output <- renderTable(head(data()))
+}
+
+shinyApp(ui, server)
+```
+
+------------------------------------------------------------------------
+
+-   La **variable de datos (carat)** está almacenada en una **variable de entorno (input\$var)**, por lo que necesitamos indicarle a `filter` explícitamente como recuperarla del df.
+
+-   La forma de hacerlo varía según si estamos usando `data-masking` o `tidy-selection`.
+
+# Evaluación tidy con data-Masking
+
+------------------------------------------------------------------------
+
+### Data-masking
+
+**¿Qué es?**
+
+-   Sintaxis que permite referirse directamente a las variables de un df como si fueran objetos en el entorno global, sin necesidad de usar el operador \$ ni comillas.
+
+**¿Dónde se usa?**
+
+-   En funciones como `filter()`, `mutate()`, `summarise()`, etc.
+
+------------------------------------------------------------------------
+
+-   Filtrar con tidyverse
 
 ```{r}
-1 + 1
+
+min <- 1 # Variable de entorno
+diamonds %>% 
+  filter(carat > min) # carat: variable de datos
+
 ```
+
+------------------------------------------------------------------------
+
+Dentro de funciones con **data-masking** se puede usar `.data` o `.env` para explicitar del tipo de variable que se trata.
+
+```{r}
+
+diamonds %>% 
+  filter(.data$carat > .env$min)
+
+
+
+```
+
+------------------------------------------------------------------------
+
+`.data` y `.env` pueden combinarse con `$` y `[[]]`
+
+```{r}
+
+diamonds %>% 
+  filter(.data[["carat"]] > .env$min)
+
+```
+
+------------------------------------------------------------------------
+
+### Ejemplo #1 corregido
+
+```{r, eval=FALSE}
+#| code-line-numbers: "|3-4|9-10"
+
+num_vars <- c("carat", "depth", "table", "price", "x", "y", "z")
+ui <- fluidPage(
+  selectInput("var", "Variable", choices = num_vars),
+  numericInput("min", "Minimum", value = 1),
+  tableOutput("output")
+)
+server <- function(input, output, session) {
+  
+  data <- reactive(diamonds %>% 
+                     filter(.data[[input$var]] > .env$input$min))
+  
+  output$output <- renderTable(head(data()))
+}
+
+shinyApp(ui, server)
+
+```
+
+------------------------------------------------------------------------
+
+### Ejemplo #2
+
+```{r, eval=FALSE}
+#| code-line-numbers: "|2-3|10"
+
+ui <- fluidPage(
+  selectInput("x", "X variable", choices = names(iris)),
+  selectInput("y", "Y variable", choices = names(iris)),
+  plotOutput("plot")
+)
+server <- function(input, output, session) {
+  output$plot <- renderPlot({
+    
+    iris %>%
+      ggplot(aes(input$x, input$y)) +
+      geom_point()
+  }, res = 96)
+}
+
+shinyApp(ui, server)
+```
+
+------------------------------------------------------------------------
+
+### Ejemplo #2 corregido
+
+```{r, eval=FALSE}
+#| code-line-numbers: "10"
+
+ui <- fluidPage(
+  selectInput("x", "X variable", choices = names(iris)),
+  selectInput("y", "Y variable", choices = names(iris)),
+  plotOutput("plot")
+)
+server <- function(input, output, session) {
+  output$plot <- renderPlot({
+    
+    iris %>%
+      ggplot(aes(.data[[input$x]], .data[[input$y]])) +
+      geom_point()
+  }, res = 96)
+}
+
+shinyApp(ui, server)
+```
+
+------------------------------------------------------------------------
+
+### Ejemplo #3
+
+```{r, eval=FALSE}
+#| code-line-numbers: "|24-25"
+
+ui <- fluidPage(
+  fileInput("data", "Datos", accept = ".csv"),
+  selectInput("var", "Variable", character()),
+  numericInput("min", "Mínimo", 1, min = 0, step = 1),
+  tableOutput("output")
+)
+server <- function(input, output, session) {
+  data <- reactive({
+    req(input$data)
+    vroom::vroom(input$data$datapath)
+  })
+  observeEvent(data(), {
+    updateSelectInput(session, "var", choices = names(data()))
+  })
+  observeEvent(input$var, {
+    val <- data()[[input$var]]
+    updateNumericInput(session, "min", value = min(val))
+  })
+  
+  output$output <- renderTable({
+    req(input$var)
+    
+    data() %>% 
+      filter(.data[[input$var]] > input$min) %>% 
+      arrange(.data[[input$var]]) %>% 
+      head(10)
+  })
+}
+
+shinyApp(ui, server)
+```
+
+------------------------------------------------------------------------
+
+### Ejemplo #3 corregido
+
+```{r, eval=FALSE}
+#| code-line-numbers: "24-25"
+#| 
+ui <- fluidPage(
+  fileInput("data", "Datos", accept = ".csv"),
+  selectInput("var", "Variable", character()),
+  numericInput("min", "Mínimo", 1, min = 0, step = 1),
+  tableOutput("output")
+)
+server <- function(input, output, session) {
+  data <- reactive({
+    req(input$data)
+    vroom::vroom(input$data$datapath)
+  })
+  observeEvent(data(), {
+    updateSelectInput(session, "var", choices = names(data()))
+  })
+  observeEvent(input$var, {
+    val <- data()[[input$var]]
+    updateNumericInput(session, "min", value = min(val))
+  })
+  
+  output$output <- renderTable({
+    req(input$var)
+    
+    data() %>% 
+      filter(.data[[input$var]] > .env$input$min) %>% 
+      arrange(.data[[input$var]]) %>% 
+      head(10)
+  })
+}
+
+shinyApp(ui, server)
+
+```
+
+# Evaluación tidy con tidy selection
+
+------------------------------------------------------------------------
+
+### Tidy-selection
+
+**¿Qué es?** Sintaxis para seleccionar columnas de un data frame, basándose en su nombre, posición o tipo. Es una extensión del data masking, pero con una semántica orientada a selección.
+
+**¿Dónde se usa?** En funciones como `select()`, `across()`, `pivot_longer()`, `pivot_wider()`, `separate()`, `extract()` y `unite()`.
+
+------------------------------------------------------------------------
+
+-   Para referir a variables de forma indirecta, usamos `any_of()` o `all_of()`.
+-   Ambas esperan una variable del entorno que sea un vector de caracteres con los nombres de las variables del conjunto de datos.
+-   Si se incluye un nombre de variable que no existe en los datos: `all_of()` generará un error, mientras que `any_of()` lo ignorará silenciosamente.
+
+------------------------------------------------------------------------
+
+```{r, eval=FALSE}
+#| code-line-numbers: "|9"
+variables_nom <- names(mtcars)
+
+
+ui <- fluidPage(
+  selectInput("vars", "Variables", variables_nom , multiple = TRUE),
+  tableOutput("data")
+)
+
+server <- function(input, output, session) {
+  output$data <- renderTable({
+    req(input$vars)
+    mtcars %>% select(any_of(input$vars))
+  })
+}
+
+shinyApp(ui, server)
+```
+
+------------------------------------------------------------------------
+
+-   `across()` permite pasar un vector de caracteres con nombres de variables en funciones que usan enmascaramiento de datos.
+
+-   Resulta útil en funciones como `group_by()` o `distinct()`, para aplicarlas a múltiples columnas.
+
+------------------------------------------------------------------------
+
+```{r,eval=FALSE}
+#| code-line-numbers: "11"
+
+ui <- fluidPage(
+  selectInput("vars", "Variables", names(mtcars), multiple = TRUE),
+  tableOutput("count")
+)
+
+server <- function(input, output, session) {
+  output$count <- renderTable({
+    req(input$vars)
+    
+    mtcars %>% 
+      group_by(across(all_of(input$vars))) %>% 
+      summarise(n = n(), .groups = "drop")
+  })
+}
+
+shinyApp(ui, server)
+```
+
+------------------------------------------------------------------------
+
+`across()` tipicamente lleva 1 o 2 argumentos:
+
+1.  Variables a seleccionar.
+
+2.  Función o lista de funciones a aplicar.
+
+------------------------------------------------------------------------
+
+```{r, eval=FALSE}
+#| code-line-numbers: "11-12"
+
+ui <- fluidPage(
+  selectInput("vars_g", "Group by", names(mtcars), multiple = TRUE),
+  selectInput("vars_s", "Summarise", names(mtcars), multiple = TRUE),
+  tableOutput("data")
+)
+
+server <- function(input, output, session) {
+  output$data <- renderTable({
+    mtcars %>% 
+      group_by(across(all_of(input$vars_g))) %>% 
+      summarise(across(all_of(input$vars_s), mean), n = n())
+  })
+}
+
+shinyApp(ui, server)
+```
+
+# ¡Muchas gracias!
